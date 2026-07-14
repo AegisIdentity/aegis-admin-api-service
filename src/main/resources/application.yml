@@ -4,11 +4,22 @@ server:
 spring:
   application:
     name: aegis-admin-api-service
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${AEGIS_ISSUER:http://localhost:9000}
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/aegis_admin}
+    username: ${POSTGRES_USER:aegis}
+    password: ${POSTGRES_PASSWORD:dev-only-change-me}
+  jpa:
+    hibernate:
+      # Dev/test convenience. Production uses versioned migrations (Flyway) with ddl-auto=validate.
+      ddl-auto: update
+    open-in-view: false
+
+aegis:
+  jwt:
+    # Keys fetched in-network; issuers validated against an allowlist (Docker split-horizon — see
+    # ResourceServerJwtConfig). In Docker, AEGIS_JWKS_URI = http://authorization-server:9000/oauth2/jwks.
+    jwk-set-uri: ${AEGIS_JWKS_URI:http://localhost:9000/oauth2/jwks}
+    accepted-issuers: ${AEGIS_ACCEPTED_ISSUERS:http://localhost:9000,http://authorization-server:9000}
 
 management:
   endpoints:
