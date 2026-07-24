@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -19,17 +22,25 @@ import org.springframework.util.StringUtils;
  * Manages per-tenant admin role assignments and resolves a subject's effective permissions. Every
  * operation is scoped to a tenant (taken from the caller's token, never the body).
  *
- * <p><strong>Backward compatibility:</strong> a subject with no explicit assignment but whose token
- * carries the {@code tenant:admin} scope is treated as {@link AdminRole#SUPER_ADMIN}, so existing
- * tenant admins keep full access until roles are explicitly assigned to them.
+ * <p><strong>Backward compatibility (M-svc-3):</strong> a subject with no explicit assignment but whose
+ * token carries the {@code tenant:admin} scope <em>may</em> be treated as {@link AdminRole#SUPER_ADMIN}.
+ * This implicit grant nullifies the least-privilege role catalog, so it is <strong>off by default</strong>
+ * and must be explicitly opted into via {@code aegis.admin.tenant-admin-super-admin-fallback.enabled=true}.
+ * When enabled, every implicit SUPER_ADMIN grant is audit-logged. Prefer assigning SUPER_ADMIN explicitly.
  */
 @Service
 public class AdminRoleService {
 
-    private final AdminRoleAssignmentRepository assignments;
+    private static final Logger log = LoggerFactory.getLogger(AdminRoleService.class);
 
-    public AdminRoleService(AdminRoleAssignmentRepository assignments) {
+    private final AdminRoleAssignmentRepository assignments;
+    private final boolean tenantAdminSuperAdminFallback;
+
+    public AdminRoleService(AdminRoleAssignmentRepository assignments,
+                            @Value("${aegis.admin.tenant-admin-super-admin-fallback.enabled:false}")
+                            boolean tenantAdminSuperAdminFallback) {
         this.assignments = assignments;
+        this.tenantAdminSuperAdminFallback = tenantAdminSuperAdminFallback;
     }
 
     @Transactional(readOnly = true)
@@ -72,9 +83,10 @@ public class AdminRoleService {
 
     /**
      * The role names effectively held by {@code subject} in {@code tenantId}. Returns the subject's
-     * assigned roles, or — if there is no assignment and {@code hasTenantAdminScope} is true — the
-     * single implicit {@link AdminRole#SUPER_ADMIN} (backward-compatible fallback). Only known roles
-     * are returned (stale names in the CSV are skipped).
+     * assigned roles, or — if there is no assignment, {@code hasTenantAdminScope} is true, AND the
+     * {@code tenant:admin}→SUPER_ADMIN fallback is enabled (M-svc-3) — the single implicit
+     * {@link AdminRole#SUPER_ADMIN} (audit-logged). Only known roles are returned (stale names in the CSV
+     * are skipped).
      */
     @Transactional(readOnly = true)
     public List<String> effectiveRoles(String tenantId, String subject, boolean hasTenantAdminScope) {
@@ -86,7 +98,14 @@ public class AdminRoleService {
         }
         Optional<AdminRoleAssignment> assignment = assignments.findByTenantIdAndSubject(tenantId, subject);
         if (assignment.isEmpty()) {
-            return hasTenantAdminScope ? List.of(AdminRole.SUPER_ADMIN.name()) : List.of();
+            if (hasTenantAdminScope && tenantAdminSuperAdminFallback) {
+                // Audit every implicit SUPER_ADMIN grant (M-svc-3) — this bypasses least-privilege RBAC.
+                log.warn("AUDIT admin.super_admin_fallback granted implicit SUPER_ADMIN via tenant:admin "
+                        + "scope (tenant={}, subject={}); assign an explicit SUPER_ADMIN role to remove "
+                        + "this fallback", tenantId, subject);
+                return List.of(AdminRole.SUPER_ADMIN.name());
+            }
+            return List.of();
         }
         List<String> roles = new ArrayList<>();
         for (String name : assignment.get().getRoles()) {

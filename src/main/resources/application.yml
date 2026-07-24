@@ -10,11 +10,21 @@ spring:
     password: ${POSTGRES_PASSWORD:dev-only-change-me}
   jpa:
     hibernate:
-      # Dev/test convenience. Production uses versioned migrations (Flyway) with ddl-auto=validate.
-      ddl-auto: update
+      # Ship a safe default (validate): production runs versioned migrations (Flyway) and must never let
+      # Hibernate mutate the schema. Local dev can set SPRING_JPA_DDL_AUTO=update; tests override to
+      # create-drop (src/test/resources/application.yml).
+      ddl-auto: ${SPRING_JPA_DDL_AUTO:validate}
     open-in-view: false
 
 aegis:
+  security:
+    # Set true (prod/stage do this via SPRING_PROFILES_ACTIVE) to force real external secrets/keys.
+    require-external-secrets: ${AEGIS_REQUIRE_EXTERNAL_SECRETS:false}
+  admin:
+    tenant-admin-super-admin-fallback:
+      # M-svc-3: implicit tenant:admin -> SUPER_ADMIN is OFF by default (it nullifies least-privilege
+      # RBAC). Opt in explicitly for backward-compat; every implicit grant is then audit-logged.
+      enabled: ${AEGIS_TENANT_ADMIN_SUPER_ADMIN_FALLBACK:false}
   jwt:
     # Keys fetched in-network; issuers validated against an allowlist (Docker split-horizon — see
     # ResourceServerJwtConfig). In Docker, AEGIS_JWKS_URI = http://authorization-server:9000/oauth2/jwks.

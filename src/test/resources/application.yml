@@ -1,0 +1,13 @@
+# Test overrides. Testcontainers Postgres starts empty and there is no Flyway in this scaffold, so let
+# Hibernate build the schema for the test run (the shipped default is validate — see main application.yml).
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+aegis:
+  admin:
+    tenant-admin-super-admin-fallback:
+      # Exercise the (opt-in) tenant:admin -> SUPER_ADMIN fallback path in AdminRoleIT. In prod this
+      # stays disabled (M-svc-3); enabling it here keeps the existing fallback coverage green.
+      enabled: true
