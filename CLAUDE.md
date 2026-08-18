@@ -26,6 +26,15 @@ JWTs are decoded by the split-horizon `config.ResourceServerJwtConfig` (in-netwo
 `./mvnw verify` — resolves `aegis-platform-parent` and `aegis-security-commons` from `~/.m2`
 (build `aegis-platform-bom` and `aegis-platform-commons` first).
 
+## Audit sink (platform System Log / CloudTrail store)
+This service is ALSO the audit sink: `audit/AuditEventConsumer` (@KafkaListener on `aegis.audit.events`)
+persists every platform event into the append-only `audit_log` table (Flyway `V2`), queryable via
+`audit/SystemLogController` at `/api/v1/admin/system-log` (SCOPE_audit:read; tenant-scoped, operators
+see all). Idempotent on Kafka `(partition, offset)`. Consumer is off unless `AEGIS_AUDIT_CONSUMER_ENABLED=true`
++ `SPRING_KAFKA_BOOTSTRAP_SERVERS`. Role grants/revokes here emit `admin.role.assigned|revoked` events
+(actor attribution is a known gap — currently unset/`system`). Proven end-to-end by `audit/AuditSinkIT`.
+
 ## Next steps
-Wire domain events (role grants/revokes) to `aegis-audit-commons`; have the authorization-server call
-`GET /api/v1/admin/internal/permissions` (SCOPE_admin:resolve) to enrich tokens with admin permissions.
+Have the authorization-server call `GET /api/v1/admin/internal/permissions` (SCOPE_admin:resolve) to
+enrich tokens with admin permissions. Add retention/partitioning to `audit_log` (grows unbounded).
+Attribute the actor on `admin.role.*` and `tenant.created` events.

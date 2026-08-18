@@ -35,12 +35,15 @@ public class AdminRoleService {
 
     private final AdminRoleAssignmentRepository assignments;
     private final boolean tenantAdminSuperAdminFallback;
+    private final io.aegis.commons.audit.AuditEventPublisher audit;
 
     public AdminRoleService(AdminRoleAssignmentRepository assignments,
                             @Value("${aegis.admin.tenant-admin-super-admin-fallback.enabled:false}")
-                            boolean tenantAdminSuperAdminFallback) {
+                            boolean tenantAdminSuperAdminFallback,
+                            io.aegis.commons.audit.AuditEventPublisher audit) {
         this.assignments = assignments;
         this.tenantAdminSuperAdminFallback = tenantAdminSuperAdminFallback;
+        this.audit = audit;
     }
 
     @Transactional(readOnly = true)
@@ -70,7 +73,10 @@ public class AdminRoleService {
         AdminRoleAssignment assignment = assignments.findByTenantIdAndSubject(tenantId, subject)
                 .orElseGet(() -> new AdminRoleAssignment(UUID.randomUUID(), tenantId, subject));
         assignment.setRoles(normalized);
-        return assignments.save(assignment);
+        AdminRoleAssignment saved = assignments.save(assignment);
+        // Granting admin roles is a high-value privilege change — stream it to the platform trail.
+        publish("admin.role.assigned", tenantId, subject, "roles=" + String.join(",", normalized));
+        return saved;
     }
 
     @Transactional
@@ -79,6 +85,21 @@ public class AdminRoleService {
         AdminRoleAssignment assignment = assignments.findByTenantIdAndSubject(tenantId, subject)
                 .orElseThrow(() -> new AssignmentNotFoundException("no role assignment for subject in tenant"));
         assignments.delete(assignment);
+        publish("admin.role.revoked", tenantId, subject, null);
+    }
+
+    /** Best-effort audit stream for privilege changes; never fails the caller (audit degrades). */
+    private void publish(String action, String tenantId, String subject, String detail) {
+        try {
+            audit.publish(io.aegis.commons.audit.AuditEvent
+                    .of("admin", action, io.aegis.commons.audit.AuditOutcome.SUCCESS)
+                    .tenant(tenantId)
+                    .target(subject)
+                    .attribute("detail", detail)
+                    .build());
+        } catch (RuntimeException ex) {
+            log.warn("admin audit publish failed (action={}, tenant={}): {}", action, tenantId, ex.toString());
+        }
     }
 
     /**

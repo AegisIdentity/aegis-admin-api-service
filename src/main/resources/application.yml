@@ -10,6 +10,20 @@ spring:
     baseline-on-migrate: true
   application:
     name: aegis-admin-api-service
+  kafka:
+    # The audit sink consumes the platform-wide event stream. Off unless a broker is configured, so
+    # local unit tests boot with no Kafka; compose/prod set SPRING_KAFKA_BOOTSTRAP_SERVERS.
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:}
+    consumer:
+      # Start from the beginning so a freshly-provisioned sink captures existing history, not just
+      # events after it came up.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      # Don't start the @KafkaListener container unless a broker is actually configured, so the
+      # service runs standalone (and unit tests pass) without Kafka.
+      auto-startup: ${AEGIS_AUDIT_CONSUMER_ENABLED:false}
   datasource:
     url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/aegis_admin}
     username: ${POSTGRES_USER:aegis}

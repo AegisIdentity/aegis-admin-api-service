@@ -28,6 +28,11 @@ public class SecurityConfig {
                         .hasAuthority("SCOPE_tenant:admin")
                         // Role catalog + the caller's own effective access: any authenticated caller.
                         .requestMatchers("/api/v1/admin/roles", "/api/v1/admin/me").authenticated()
+                        // System Log (the platform audit trail): any authenticated caller may read,
+                        // but the controller scopes results to the caller's own tenant unless they
+                        // hold tenant:platform-admin — so authorization is enforced there, per-row,
+                        // not just at the URL.
+                        .requestMatchers("/api/v1/admin/system-log").hasAuthority("SCOPE_audit:read")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
         return http.build();
