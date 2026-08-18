@@ -37,4 +37,16 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntry, UUID> {
     @Query("select (count(a) > 0) from AuditLogEntry a "
             + "where a.kafkaPartition = :partition and a.kafkaOffset = :offset")
     boolean existsByKafkaCoordinate(@Param("partition") int partition, @Param("offset") long offset);
+
+    /**
+     * Delete events older than {@code cutoff} — the retention purge. A bulk modifying delete, so it
+     * does not load rows into memory; batch-limited by the caller so one run cannot lock the table
+     * for long. This is the ONLY delete path on an otherwise append-only store, and it removes only
+     * rows beyond the retention window.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(value = "DELETE FROM audit_log WHERE id IN "
+            + "(SELECT id FROM audit_log WHERE event_time < :cutoff ORDER BY event_time LIMIT :batchSize)",
+            nativeQuery = true)
+    int deleteOlderThan(@Param("cutoff") java.time.Instant cutoff, @Param("batchSize") int batchSize);
 }

@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Import;
  * correlation id) and {@link CorrelationIdFilter} that supplies that correlation id. The module's own
  * {@code AdminExceptionHandler} adds the RBAC domain exceptions on top. */
 @SpringBootApplication
+@org.springframework.scheduling.annotation.EnableScheduling // audit_log retention purge
 @Import({CorrelationIdFilter.class, ApiExceptionHandler.class})
 public class AdminApplication {
     public static void main(String[] args) {

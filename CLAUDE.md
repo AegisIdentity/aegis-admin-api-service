@@ -31,10 +31,12 @@ This service is ALSO the audit sink: `audit/AuditEventConsumer` (@KafkaListener 
 persists every platform event into the append-only `audit_log` table (Flyway `V2`), queryable via
 `audit/SystemLogController` at `/api/v1/admin/system-log` (SCOPE_audit:read; tenant-scoped, operators
 see all). Idempotent on Kafka `(partition, offset)`. Consumer is off unless `AEGIS_AUDIT_CONSUMER_ENABLED=true`
-+ `SPRING_KAFKA_BOOTSTRAP_SERVERS`. Role grants/revokes here emit `admin.role.assigned|revoked` events
-(actor attribution is a known gap — currently unset/`system`). Proven end-to-end by `audit/AuditSinkIT`.
++ `SPRING_KAFKA_BOOTSTRAP_SERVERS`. Role grants/revokes emit `admin.role.assigned|revoked` events attributed to the acting admin (from
+the caller's token subject). `audit/AuditLogRetentionService` purges rows beyond the retention
+window (`aegis.audit.retention.days`, default 365) on a nightly schedule. Proven by `audit/AuditSinkIT`,
+`SystemLogControllerIT`, `AdminRoleAuditTest`, `AuditLogRetentionIT`.
 
 ## Next steps
 Have the authorization-server call `GET /api/v1/admin/internal/permissions` (SCOPE_admin:resolve) to
-enrich tokens with admin permissions. Add retention/partitioning to `audit_log` (grows unbounded).
-Attribute the actor on `admin.role.*` and `tenant.created` events.
+enrich tokens with admin permissions. For very high audit volume, move `audit_log` to native monthly
+partitioning (purge becomes a partition-drop) and archive to object storage before purge.

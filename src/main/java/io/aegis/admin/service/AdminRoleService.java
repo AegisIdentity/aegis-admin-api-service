@@ -64,7 +64,7 @@ public class AdminRoleService {
      * {@link UnknownRoleException}). Role names are de-duplicated and stored in catalog order.
      */
     @Transactional
-    public AdminRoleAssignment upsert(String tenantId, String subject, List<String> roleNames) {
+    public AdminRoleAssignment upsert(String tenantId, String subject, List<String> roleNames, String actor) {
         requireTenant(tenantId);
         if (!StringUtils.hasText(subject)) {
             throw new IllegalArgumentException("subject is required");
@@ -74,26 +74,28 @@ public class AdminRoleService {
                 .orElseGet(() -> new AdminRoleAssignment(UUID.randomUUID(), tenantId, subject));
         assignment.setRoles(normalized);
         AdminRoleAssignment saved = assignments.save(assignment);
-        // Granting admin roles is a high-value privilege change — stream it to the platform trail.
-        publish("admin.role.assigned", tenantId, subject, "roles=" + String.join(",", normalized));
+        // Granting admin roles is a high-value privilege change — stream it, attributed to the admin
+        // who made the grant, so "who gave X these roles" is answerable from the audit trail.
+        publish("admin.role.assigned", tenantId, actor, subject, "roles=" + String.join(",", normalized));
         return saved;
     }
 
     @Transactional
-    public void delete(String tenantId, String subject) {
+    public void delete(String tenantId, String subject, String actor) {
         requireTenant(tenantId);
         AdminRoleAssignment assignment = assignments.findByTenantIdAndSubject(tenantId, subject)
                 .orElseThrow(() -> new AssignmentNotFoundException("no role assignment for subject in tenant"));
         assignments.delete(assignment);
-        publish("admin.role.revoked", tenantId, subject, null);
+        publish("admin.role.revoked", tenantId, actor, subject, null);
     }
 
     /** Best-effort audit stream for privilege changes; never fails the caller (audit degrades). */
-    private void publish(String action, String tenantId, String subject, String detail) {
+    private void publish(String action, String tenantId, String actor, String subject, String detail) {
         try {
             audit.publish(io.aegis.commons.audit.AuditEvent
                     .of("admin", action, io.aegis.commons.audit.AuditOutcome.SUCCESS)
                     .tenant(tenantId)
+                    .actor(actor == null || actor.isBlank() ? "system" : actor)
                     .target(subject)
                     .attribute("detail", detail)
                     .build());

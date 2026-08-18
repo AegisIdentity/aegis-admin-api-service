@@ -60,7 +60,8 @@ public class AdminRoleController {
     public AdminAssignmentView upsertAdmin(@PathVariable String subject,
                                            @Valid @RequestBody UpdateRolesRequest request,
                                            @AuthenticationPrincipal Jwt caller) {
-        AdminRoleAssignment saved = service.upsert(tenantOf(caller), subject, request.roles());
+        AdminRoleAssignment saved = service.upsert(tenantOf(caller), subject, request.roles(),
+                caller.getSubject());
         return toView(saved);
     }
 
@@ -68,7 +69,7 @@ public class AdminRoleController {
     @DeleteMapping("/api/v1/admin/admins/{subject}")
     public ResponseEntity<Void> deleteAdmin(@PathVariable String subject,
                                             @AuthenticationPrincipal Jwt caller) {
-        service.delete(tenantOf(caller), subject);
+        service.delete(tenantOf(caller), subject, caller.getSubject());
         return ResponseEntity.noContent().build();
     }
 
