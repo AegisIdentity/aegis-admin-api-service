@@ -42,6 +42,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/agent-consents")
                         .authenticated()
 
+                        // Vault broker (KMaaS/SMaaS). Tenant-admin scope gates ENTRY; the
+                        // controller then enforces which tenant, because scope alone cannot express
+                        // that and this surface fronts every tenant's key material.
+                        .requestMatchers("/api/v1/tenants/*/vault/**")
+                        .hasAnyAuthority("SCOPE_tenant:admin", "SCOPE_tenant:platform-admin")
+
                         .requestMatchers("/api/v1/admin/system-log").hasAuthority("SCOPE_audit:read")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));

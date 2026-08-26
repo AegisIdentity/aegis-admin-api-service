@@ -81,6 +81,10 @@
         </dependency>
         <dependency>
             <groupId>io.aegis</groupId>
+            <artifactId>aegis-vault-commons</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.aegis</groupId>
             <artifactId>aegis-testing-support</artifactId>
             <scope>test</scope>
         </dependency>
