@@ -32,6 +32,16 @@ public class SecurityConfig {
                         // but the controller scopes results to the caller's own tenant unless they
                         // hold tenant:platform-admin — so authorization is enforced there, per-row,
                         // not just at the URL.
+                        // Per-tool consent. Consent belongs to the authenticated principal and the
+                        // controller derives both tenant and subject from the token, so an ordinary
+                        // authenticated user may manage their OWN consents — granting consent is a
+                        // user action, not an admin one. Listing another agent's consents needs the
+                        // admin scope, since that is an investigative view over other people's grants.
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/agent-consents")
+                        .authenticated()
+                        .requestMatchers("/api/v1/agent-consents")
+                        .authenticated()
+
                         .requestMatchers("/api/v1/admin/system-log").hasAuthority("SCOPE_audit:read")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
